@@ -1,5 +1,10 @@
 Revision history for Perl module Business::Hours
 
+0.04 Sun Nov 28 17:43:34 EST 2004
+    - Test fixes
+    - perltidy 
+
+
 0.03 April 1 2003
         - fixed a bug in between
 

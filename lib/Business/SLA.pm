@@ -4,10 +4,8 @@ use strict;
 use warnings;
 use Business::Hours;
 
-	use vars qw ($VERSION);
-	$VERSION     = 0.01;
-
-########################################### main pod documentation begin ##
+use vars qw ($VERSION);
+$VERSION = '0.04';
 
 =head1 NAME
 
@@ -40,7 +38,7 @@ Service Level Agreements.
 
 =head1 SUPPORT
 
-Send email  to bug-business-sla@rt.cpan.org
+Send email to bug-business-sla@rt.cpan.org
 
 
 =head1 AUTHOR
@@ -65,14 +63,12 @@ perl(1), L<Business::Hours>.
 
 =cut
 
-############################################# main pod documentation end ##
-
 sub new {
-	my $class = shift;
+    my $class = shift;
 
-	my $self = bless ({}, ref ($class) || $class);
+    my $self = bless( {}, ref($class) || $class );
 
-	return ($self);
+    return ($self);
 }
 
 =head2 SetBusinessHours
@@ -99,7 +95,7 @@ is($sla->BusinessHours, $bizhours, "Returned same Business Hours");
 =cut
 
 sub SetBusinessHours {
-    my $self = shift;
+    my $self     = shift;
     my $bizhours = shift;
 
     $self->{'business_hours'} = $bizhours;
@@ -142,7 +138,7 @@ is($sla->InHoursDefault, $val, "Returned same InHoursDefault");
 
 sub SetInHoursDefault {
     my $self = shift;
-    my $sla = shift;;
+    my $sla  = shift;
 
     $self->{'in_hours_default'} = $sla;
 }
@@ -182,7 +178,7 @@ is($sla->OutOfHoursDefault, $val, "Returned same OutOfHoursDefault");
 
 sub SetOutOfHoursDefault {
     my $self = shift;
-    my $sla = shift;;
+    my $sla  = shift;
 
     $self->{'out_of_hours_default'} = $sla;
 }
@@ -198,7 +194,6 @@ sub OutOfHoursDefault {
 
     return $self->{'out_of_hours_default'};
 }
-
 
 =begin testing
 
@@ -259,12 +254,12 @@ sub IsInHours {
     my $date = shift;
 
     # if no business hours are set, by definition we're in hours
-    if ( !(defined $self->BusinessHours()) ) {
-	return 1;
+    if ( !( defined $self->BusinessHours() ) ) {
+        return 1;
     }
 
-    if ($self->BusinessHours()->first_after($date) != $date) { 
-	return 0;
+    if ( $self->BusinessHours()->first_after($date) != $date ) {
+        return 0;
     }
 
     return 1;
@@ -334,10 +329,11 @@ sub SLA {
     my $self = shift;
     my $date = shift;
 
-    if ($self->IsInHours($date)) {
-	return $self->InHoursDefault();
-    } else {
-	return $self->OutOfHoursDefault();
+    if ( $self->IsInHours($date) ) {
+        return $self->InHoursDefault();
+    }
+    else {
+        return $self->OutOfHoursDefault();
     }
 
 }
@@ -356,7 +352,7 @@ Adds an SLA value.  Takes a string (the hash key) and a hash.
 
 sub Add {
     my $self = shift;
-    my $sla = shift;
+    my $sla  = shift;
 
     my %hash = @_;
 
@@ -388,15 +384,16 @@ is($sla->AddRealMinutes('aaa'), 120,
 
 sub AddRealMinutes {
     my $self = shift;
-    my $sla = shift;
+    my $sla  = shift;
 
     return undef unless defined $sla;
 
     my $minutes;
-    if ($self->{'hash'} && $self->{'hash'}->{$sla}) {
-	$minutes = $self->{'hash'}->{$sla}->{'RealMinutes'};
-    } else {
-	$minutes = undef;
+    if ( $self->{'hash'} && $self->{'hash'}->{$sla} ) {
+        $minutes = $self->{'hash'}->{$sla}->{'RealMinutes'};
+    }
+    else {
+        $minutes = undef;
     }
 
     return $minutes;
@@ -433,19 +430,20 @@ is($sla->AddBusinessMinutes('aaa'), 60,
 
 sub AddBusinessMinutes {
     my $self = shift;
-    my $sla = shift;
+    my $sla  = shift;
 
     return undef unless defined $sla;
 
-    if (!$self->BusinessHours) {
-	return undef;
+    if ( !$self->BusinessHours ) {
+        return undef;
     }
 
     my $minutes;
-    if ($self->{'hash'} && $self->{'hash'}->{$sla}) {
-	$minutes = $self->{'hash'}->{$sla}->{'BusinessMinutes'};
-    } else {
-	$minutes = undef;
+    if ( $self->{'hash'} && $self->{'hash'}->{$sla} ) {
+        $minutes = $self->{'hash'}->{$sla}->{'BusinessMinutes'};
+    }
+    else {
+        $minutes = undef;
     }
 
     return $minutes;
@@ -477,12 +475,13 @@ is($sla->Starts($time, 'aaa'), $time, "Get starting time");
 sub Starts {
     my $self = shift;
     my $date = shift;
-    my $sla = shift;
+    my $sla  = shift;
 
-    if (defined $self->AddBusinessMinutes($sla)) {
-	return $self->BusinessHours()->first_after($date);
-    } else {
-	return $date;
+    if ( defined $self->AddBusinessMinutes($sla) ) {
+        return $self->BusinessHours()->first_after($date);
+    }
+    else {
+        return $date;
     }
 }
 
@@ -512,19 +511,18 @@ is($sla->Due($time, 'aaa'), $time + (10 * 60), "Get starting time");
 sub Due {
     my $self = shift;
     my $date = shift;
-    my $sla = shift;
+    my $sla  = shift;
 
     # find start time
     my $due = $self->Starts($date);
 
     # don't add business minutes unless we have some set
-    if (defined $self->AddBusinessMinutes($sla)) {
-	my $bh = $self->BusinessHours();
-	$due = $bh->add_seconds($due, 
-				60 * $self->AddBusinessMinutes($sla));
+    if ( defined $self->AddBusinessMinutes($sla) ) {
+        my $bh = $self->BusinessHours();
+        $due = $bh->add_seconds( $due, 60 * $self->AddBusinessMinutes($sla) );
     }
 
-    $due += (60 * $self->AddRealMinutes($sla));
+    $due += ( 60 * $self->AddRealMinutes($sla) );
 
     return $due;
 
