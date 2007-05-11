@@ -2,10 +2,9 @@ package Business::SLA;
 
 use strict;
 use warnings;
-use Business::Hours;
 
-use vars qw ($VERSION);
-$VERSION = '0.04';
+use vars qw($VERSION);
+$VERSION = '0.05';
 
 =head1 NAME
 
@@ -15,31 +14,299 @@ Business::SLA -
 
   use Business::SLA;
 
-  my $SLAObj = new Business::SLA;
+  my $SLAObj = Business::SLA->new(
+    BusinessHours     => new Business::Hours,
+    InHoursDefault    => '2 real hours',
+    OutOfHoursDefault => '1 business hour',
+  );
 
-  $SLAObj->Add('2 real hours', ( 'RealMinutes' => 120, 
-				 'BusinessMinutes' => undef, ));
-
-  $SLAObj->Add('1 business hour', ( 'RealMinutes' => 0, 
-				    'BusinessMinutes' => 60, ));
-
-  $SLAObj->Add('next business minute', ( 'RealMinutes' => 0, 
-					 'BusinessMinutes' => 0, ));
-
+  # or set/change options later
+  $SLAObj->SetBusinessHours( new Business::Hours );
   $SLAObj->SetInHoursDefault('2 real hours');
   $SLAObj->SetOutOfHoursDefault('1 business hour');
 
+  # add service levels
+  $SLAObj->Add( '2 real hours' => RealMinutes => 2*60 );
+  $SLAObj->Add( '1 business hour' => BusinessMinutes => 60 );
+  $SLAObj->Add( 'next business minute' );
 
 =head1 DESCRIPTION
 
 This module is a simple tool for handling operations related to
 Service Level Agreements.
 
+=head1 METHODS
+
+=head2 new
+
+Creates and returns new Business::SLA object.
+
+Takes a hash with values of L</BusinessHours>, L</InHoursDefault>
+and L</OutOfHoursDefault> options. You can ommit these options
+and set them latter using methods (see below).
+
+=cut
+
+sub new {
+    my $class = shift;
+
+    my $self = bless( { @_ }, ref($class) || $class );
+
+    return ($self);
+}
+
+=head2 SetBusinessHours
+
+Sets a L<Business::Hours> object to use for calculations.
+This module works without this option, but looses most functionality
+you can get with it.
+
+It's possible use any object that API-compatible with L<Business::Hours>.
+
+=cut
+
+sub SetBusinessHours {
+    my $self     = shift;
+    my $bizhours = shift;
+
+    return $self->{'BusinessHours'} = $bizhours;
+}
+
+=head2 BusinessHours
+
+Returns the current L<Business::Hours> object or undef if
+it's not set.
+
+=cut
+
+sub BusinessHours {
+    my $self = shift;
+
+    return $self->{'BusinessHours'};
+}
+
+=head2 SetInHoursDefault
+
+Sets the default service level for times inside of business hours.
+
+Takes a service level.
+
+=cut
+
+sub SetInHoursDefault {
+    my $self = shift;
+    my $sla  = shift;
+
+    return $self->{'InHoursDefault'} = $sla;
+}
+
+=head2 InHoursDefault
+
+Returns the default service level for times inside of business hours.
+
+=cut
+
+sub InHoursDefault {
+    my $self = shift;
+
+    return $self->{'InHoursDefault'};
+}
+
+=head2 SetOutOfHoursDefault
+
+Sets the default service level for times outside of business hours.
+
+Takes a service level.
+
+Note that L</BusinessHours> are used for calculations, so this
+option makes not much sense without L<business hours have been
+set|/SetBusinessHours>.
+
+=cut
+
+sub SetOutOfHoursDefault {
+    my $self = shift;
+    my $sla  = shift;
+
+    $self->{'OutOfHoursDefault'} = $sla;
+}
+
+=head2 OutOfHoursDefault
+
+Returns the default service level for times outside of business hours.
+
+=cut
+
+sub OutOfHoursDefault {
+    my $self = shift;
+
+    return $self->{'OutOfHoursDefault'};
+}
+
+=head2 IsInHours
+
+Returns true if the date passed in is in business hours, and false otherwise.
+If no L<business hours have been set|/SetBusinessHours>, returns true by default.
+
+Takes a date in Unix time format (number of seconds since the epoch).
+
+=cut
+
+sub IsInHours {
+    my $self = shift;
+    my $date = shift;
+
+    # if no business hours are set, by definition we're in hours
+    if ( my $bhours = $self->BusinessHours ) {
+        return $bhours->first_after($date) == $date? 1 : 0;
+    }
+    return 1;
+}
+
+=head2 SLA
+
+Returns the default servise level for the specified time.
+
+Takes a date in Unix time format (number of seconds since the epoch).
+
+=cut
+
+sub SLA {
+    my $self = shift;
+    my $date = shift;
+
+    if ( $self->IsInHours($date) ) {
+        return $self->InHoursDefault;
+    }
+    else {
+        return $self->OutOfHoursDefault;
+    }
+}
+
+=head2 Add
+
+Adds or replaces a service level definition.
+
+Takes a service level and a hash with agreements. In the hash you
+can define BusinessMinutes, RealMinutes and StartImmediately boolean
+option.
+
+=cut
+
+sub Add {
+    my $self = shift;
+    my $sla  = shift;
+
+    return $self->{'hash'}->{$sla} = { @_ };
+}
+
+=head2 AddRealMinutes
+
+The number of real minutes to add for the specified SLA.
+
+Takes a service level.
+
+=cut
+
+sub AddRealMinutes {
+    my $self = shift;
+    my $sla  = shift;
+
+    return 0 unless exists $self->{'hash'}{ $sla }{'RealMinutes'};
+    return $self->{'hash'}{ $sla }{'RealMinutes'} || 0;
+}
+
+=head2 AddBusinessMinutes
+
+The number of business minutes to add for the specified SLA.
+
+Takes a service level.
+
+=cut
+
+sub AddBusinessMinutes {
+    my $self = shift;
+    my $sla  = shift;
+
+    return undef unless $self->BusinessHours;
+    return 0 unless exists $self->{'hash'}{ $sla }{'BusinessMinutes'};
+    return $self->{'hash'}{ $sla }{'BusinessMinutes'} || 0;
+}
+
+=head2 StartImmediately
+
+Returns true if things should be started immediately for a service
+level. See also L<Add> and L</Starts>.
+
+Takes the service level.
+
+=cut
+
+sub StartImmediately {
+    my $self = shift;
+    my $sla  = shift;
+
+    return $self->{'hash'}{ $sla }{'StartImmediately'} || 0;
+}
+
+=head2 Starts
+
+Returns the starting time, given a date and a service level.
+
+If the service level's been defined as L<StartImmediately> then returns
+the same date, as well this also happens if L<business hours are
+not set|/SetBusinessHours>.
+
+Takes a date in Unix time format (number of seconds since the epoch)
+and a service level.
+
+=cut
+
+sub Starts {
+    my $self = shift;
+    my $date = shift;
+    my $sla  = shift || $self->SLA( $date );
+
+    return $date if $self->StartImmediately( $sla );
+
+    if ( my $bhours = $self->BusinessHours ) {
+        return $bhours->first_after( $date );
+    }
+    else {
+        return $date;
+    }
+}
+
+=head2 Due
+
+Returns the due time, given an SLA and a date.
+
+Takes a date in Unix time format (number of seconds since the epoch)
+and the hash key for the SLA.
+
+=cut
+
+sub Due {
+    my $self = shift;
+    my $date = shift;
+    my $sla  = shift || $self->SLA( $date );
+
+    # find start time
+    my $due = $self->Starts($date, $sla);
+
+    # don't add business minutes unless we have some set
+    if ( my $bminutes = $self->AddBusinessMinutes($sla) ) {
+        $due = $self->BusinessHours->add_seconds( $due, 60 * $bminutes );
+    }
+
+    $due += ( 60 * $self->AddRealMinutes($sla) );
+
+    return $due;
+}
 
 =head1 SUPPORT
 
 Send email to bug-business-sla@rt.cpan.org
-
 
 =head1 AUTHOR
 
@@ -63,469 +330,5 @@ perl(1), L<Business::Hours>.
 
 =cut
 
-sub new {
-    my $class = shift;
-
-    my $self = bless( {}, ref($class) || $class );
-
-    return ($self);
-}
-
-=head2 SetBusinessHours
-
-Sets the Business::Hours object for this object.
-
-Takes a Business::Hours object.
-
-=begin testing
-
-use_ok  (Business::Hours);
-use_ok  (Business::SLA);
-
-my $sla = new Business::SLA;
-is(ref($sla), 'Business::SLA');
-
-my $bizhours = Business::Hours->new();
-$sla->SetBusinessHours($bizhours);
-
-is($sla->BusinessHours, $bizhours, "Returned same Business Hours");
-
-=end testing
-
-=cut
-
-sub SetBusinessHours {
-    my $self     = shift;
-    my $bizhours = shift;
-
-    $self->{'business_hours'} = $bizhours;
-
-    return;
-}
-
-=head2 BusinessHours
-
-Returns the Business::Hours object.
-
-=cut
-
-sub BusinessHours {
-    my $self = shift;
-
-    return $self->{'business_hours'};
-}
-
-=head2 SetInHoursDefault
-
-Sets the default SLA for times inside of business hours.
-
-Takes a string which is the hash key for the desired SLA.
-
-=begin testing
-
-
-my $sla = new Business::SLA;
-
-my $val = "aaa";
-
-$sla->SetInHoursDefault($val);
-
-is($sla->InHoursDefault, $val, "Returned same InHoursDefault");
-
-=end testing
-
-=cut
-
-sub SetInHoursDefault {
-    my $self = shift;
-    my $sla  = shift;
-
-    $self->{'in_hours_default'} = $sla;
-}
-
-=head2 InHoursDefault
-
-Returns the default SLA for times inside of business hours.
-
-=cut
-
-sub InHoursDefault {
-    my $self = shift;
-
-    return $self->{'in_hours_default'};
-}
-
-=head2 SetOutOfHoursDefault
-
-Sets the default SLA for times outside of business hours.
-
-Takes a string which is the hash key for the desired SLA.
-
-=begin testing
-
-
-my $sla = new Business::SLA;
-
-my $val = "aaa";
-
-$sla->SetOutOfHoursDefault($val);
-
-is($sla->OutOfHoursDefault, $val, "Returned same OutOfHoursDefault");
-
-=end testing
-
-=cut
-
-sub SetOutOfHoursDefault {
-    my $self = shift;
-    my $sla  = shift;
-
-    $self->{'out_of_hours_default'} = $sla;
-}
-
-=head2 OutOfHoursDefault
-
-Returns the default SLA for times outside of business hours.
-
-=cut
-
-sub OutOfHoursDefault {
-    my $self = shift;
-
-    return $self->{'out_of_hours_default'};
-}
-
-=begin testing
-
-
-my $sla = new Business::SLA;
-
-my $bizhours = Business::Hours->new();
-
-# pick a date that's during business hours
-$starttime = 0;
-($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($starttime);
-while ($wday == 0  || $wday == 6) {
-    $starttime += ( 24 * 60 * 60);
-    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($starttime);
-}
-while ( $hour < 9 || $hour >= 18 ) {
-    $starttime += ( 4 * 60);
-    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($starttime);
-}
-
-# with Business::Hours set
-$sla->SetBusinessHours($bizhours);
-is($sla->IsInHours($starttime), 1, "Time is in business hours");
-
-# with Business::Hours unset
-$sla->SetBusinessHours(undef);
-is($sla->IsInHours($starttime), 1, "Time is in business hours");
-
-# pick a date that's not during business hours
-$starttime = 0;
-($xsec,$xmin,$xhour,$xmday,$xmon,$xyear,$xwday,$xyday,$xisdst) = localtime($starttime);
-while ( $xwday != 0 ) {
-    $starttime += ( 24 * 60 * 60);
-    ($xsec,$xmin,$xhour,$xmday,$xmon,$xyear,$xwday,$xyday,$xisdst) = localtime($starttime);
-}
-
-# with Business::Hours set
-$sla->SetBusinessHours($bizhours);
-is($sla->IsInHours($starttime), 0, "Time is in business hours");
-
-# with Business::Hours unset
-$sla->SetBusinessHours(undef);
-is($sla->IsInHours($starttime), 1, "Time is in business hours");
-
-=end testing
-
-=head2 IsInHours
-
-Returns 1 if the date passed in is in business hours, and 0 otherwise.
-If no business hours have been set, returns 1 by default.
-
-Takes a date in Unix time format (number of seconds since the epoch).
-
-=cut
-
-sub IsInHours {
-    my $self = shift;
-    my $date = shift;
-
-    # if no business hours are set, by definition we're in hours
-    if ( !( defined $self->BusinessHours() ) ) {
-        return 1;
-    }
-
-    if ( $self->BusinessHours()->first_after($date) != $date ) {
-        return 0;
-    }
-
-    return 1;
-}
-
-=head2 SLA
-
-Returns the SLA for the specified time.
-
-Takes a date in Unix time format (number of seconds since the epoch).
-
-=begin testing
-
-
-my $sla = new Business::SLA;
-
-# set the defaults
-my $inhoursval = "aaa";
-$sla->SetInHoursDefault($inhoursval);
-
-my $outofhoursval = "bbb";
-$sla->SetOutOfHoursDefault($outofhoursval);
-
-my $bizhours = Business::Hours->new();
-
-# pick a date that's during business hours
-$starttime = 0;
-($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($starttime);
-while ($wday == 0  || $wday == 6) {
-    $starttime += ( 24 * 60 * 60);
-    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($starttime);
-}
-while ( $hour < 9 || $hour >= 18 ) {
-    $starttime += ( 4 * 60);
-    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($starttime);
-}
-
-# with Business::Hours set
-$sla->SetBusinessHours($bizhours);
-is($sla->SLA($starttime), $inhoursval, "Got correct SLA value");
-
-# with Business::Hours unset
-$sla->SetBusinessHours(undef);
-is($sla->SLA($starttime), $inhoursval, "Got correct SLA value");
-
-# pick a date that's not during business hours
-$starttime = 0;
-($xsec,$xmin,$xhour,$xmday,$xmon,$xyear,$xwday,$xyday,$xisdst) = localtime($starttime);
-while ( $xwday != 0 ) {
-    $starttime += ( 24 * 60 * 60);
-    ($xsec,$xmin,$xhour,$xmday,$xmon,$xyear,$xwday,$xyday,$xisdst) = localtime($starttime);
-}
-
-# with Business::Hours set
-$sla->SetBusinessHours($bizhours);
-is($sla->SLA($starttime), $outofhoursval, "Got correct SLA value");
-
-# with Business::Hours unset
-$sla->SetBusinessHours(undef);
-is($sla->SLA($starttime), $inhoursval, "Got correct SLA value");
-
-=end testing
-
-=cut
-
-sub SLA {
-    my $self = shift;
-    my $date = shift;
-
-    if ( $self->IsInHours($date) ) {
-        return $self->InHoursDefault();
-    }
-    else {
-        return $self->OutOfHoursDefault();
-    }
-
-}
-
-=head2 Add
-
-Adds an SLA value.  Takes a string (the hash key) and a hash.
-
-=begin testing
-
-# add is tested in AddBusinessMinutes/AddRealMinutes
-
-=end testing
-
-=cut
-
-sub Add {
-    my $self = shift;
-    my $sla  = shift;
-
-    my %hash = @_;
-
-    $self->{'hash'}->{$sla} = \%hash;
-
-    return;
-}
-
-=head2 AddRealMinutes
-
-The number of real minutes to add for the specified SLA.
-
-Takes the hash key for the SLA.
-
-=begin testing
-
-
-my $sla = new Business::SLA;
-
-$sla->Add('aaa', ( 'RealMinutes' => 120, 
-		   'BusinessMinutes' => 60, ));
-
-is($sla->AddRealMinutes('aaa'), 120, 
-   "Got real minutes for added SLA");
-
-=end testing
-
-=cut
-
-sub AddRealMinutes {
-    my $self = shift;
-    my $sla  = shift;
-
-    return undef unless defined $sla;
-
-    my $minutes;
-    if ( $self->{'hash'} && $self->{'hash'}->{$sla} ) {
-        $minutes = $self->{'hash'}->{$sla}->{'RealMinutes'};
-    }
-    else {
-        $minutes = undef;
-    }
-
-    return $minutes;
-}
-
-=head2 AddBusinessMinutes
-
-The number of business minutes to add for the specified SLA.
-
-Takes the hash key for the SLA.
-
-=begin testing
-
-
-my $sla = new Business::SLA;
-
-$sla->Add('aaa', ( 'RealMinutes' => 120, 
-		   'BusinessMinutes' => 60, ));
-
-# with no business minutes set
-is($sla->AddBusinessMinutes('aaa'), undef, 
-   "Got business minutes for added SLA without Business Hours");
-
-my $bizhours = Business::Hours->new();
-$sla->SetBusinessHours($bizhours);
-
-# with no business minutes set
-is($sla->AddBusinessMinutes('aaa'), 60, 
-   "Got business minutes for added SLA with Business Hours");
-
-=end testing
-
-=cut
-
-sub AddBusinessMinutes {
-    my $self = shift;
-    my $sla  = shift;
-
-    return undef unless defined $sla;
-
-    if ( !$self->BusinessHours ) {
-        return undef;
-    }
-
-    my $minutes;
-    if ( $self->{'hash'} && $self->{'hash'}->{$sla} ) {
-        $minutes = $self->{'hash'}->{$sla}->{'BusinessMinutes'};
-    }
-    else {
-        $minutes = undef;
-    }
-
-    return $minutes;
-}
-
-=head2 Starts
-
-Returns the starting time, given an SLA and a date.
-
-Takes a date in Unix time format (number of seconds since the epoch)
-and the hash key for the SLA.
-
-=begin testing
-
-
-my $sla = new Business::SLA;
-
-$sla->Add('aaa', ( 'RealMinutes' => 10, 
-		   'BusinessMinutes' => undef, ));
-
-my $time = time();
-
-is($sla->Starts($time, 'aaa'), $time, "Get starting time");
-
-=end testing
-
-=cut
-
-sub Starts {
-    my $self = shift;
-    my $date = shift;
-    my $sla  = shift;
-
-    if ( defined $self->AddBusinessMinutes($sla) ) {
-        return $self->BusinessHours()->first_after($date);
-    }
-    else {
-        return $date;
-    }
-}
-
-=head2 Due
-
-Returns the due time, given an SLA and a date.
-
-Takes a date in Unix time format (number of seconds since the epoch)
-and the hash key for the SLA.
-
-=begin testing
-
-
-my $sla = new Business::SLA;
-
-$sla->Add('aaa', ( 'RealMinutes' => 10, 
-		   'BusinessMinutes' => undef, ));
-
-my $time = time();
-
-is($sla->Due($time, 'aaa'), $time + (10 * 60), "Get starting time");
-
-=end testing
-
-=cut
-
-sub Due {
-    my $self = shift;
-    my $date = shift;
-    my $sla  = shift;
-
-    # find start time
-    my $due = $self->Starts($date);
-
-    # don't add business minutes unless we have some set
-    if ( defined $self->AddBusinessMinutes($sla) ) {
-        my $bh = $self->BusinessHours();
-        $due = $bh->add_seconds( $due, 60 * $self->AddBusinessMinutes($sla) );
-    }
-
-    $due += ( 60 * $self->AddRealMinutes($sla) );
-
-    return $due;
-
-}
 
 1;
